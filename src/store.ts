@@ -238,6 +238,30 @@ export async function updateDeploymentState(
   ).run();
 }
 
+export async function updateCheckRunId(
+  db: D1Database,
+  connectionId: string,
+  edgeoneDeploymentId: string,
+  checkRunId: number,
+): Promise<void> {
+  await db.prepare(
+    `UPDATE deployment_states SET check_run_id = ?, updated_at = ?
+     WHERE connection_id = ? AND edgeone_deployment_id = ?`,
+  ).bind(checkRunId, Date.now(), connectionId, edgeoneDeploymentId).run();
+}
+
+export async function updateGitHubDeploymentId(
+  db: D1Database,
+  connectionId: string,
+  edgeoneDeploymentId: string,
+  githubDeploymentId: number,
+): Promise<void> {
+  await db.prepare(
+    `UPDATE deployment_states SET github_deployment_id = ?, updated_at = ?
+     WHERE connection_id = ? AND edgeone_deployment_id = ?`,
+  ).bind(githubDeploymentId, Date.now(), connectionId, edgeoneDeploymentId).run();
+}
+
 export async function claimDeploymentEvent(
   db: D1Database,
   connectionId: string,
@@ -245,7 +269,7 @@ export async function claimDeploymentEvent(
   eventType: string,
 ): Promise<boolean> {
   const now = Date.now();
-  const staleBefore = now - 2 * 60 * 1000;
+  const staleBefore = now - 10 * 1000;
   const result = await db.prepare(
     `UPDATE deployment_states
      SET processing_event_type = ?, processing_started_at = ?, updated_at = ?

@@ -19,7 +19,7 @@ Installation access is never inferred from an `installation_id` query parameter.
 1. GitHub redirects the installer to `/setup?installation_id=...`.
 2. The Worker creates a signed OAuth state bound to the installation and an HttpOnly nonce cookie.
 3. GitHub redirects to `/auth/github/callback` after the user authorizes the App.
-4. The Worker exchanges the code for a request-local user token and verifies the installation through `/user/installations/:installation_id`.
+4. The Worker exchanges the code for a request-local user token, lists the installations accessible to that token through `/user/installations`, and requires an exact installation ID match.
 5. A random, eight-hour setup session is stored as a digest in D1 and set in an HttpOnly cookie.
 6. The setup UI uses an installation token to list selectable repositories. It never exposes GitHub credentials.
 
@@ -50,7 +50,7 @@ GitHub installation tokens and user access tokens are request-local and are neve
 ## Idempotency
 
 - The D1 primary key `(connection_id, edgeone_deployment_id)` stabilizes the commit SHA across retries.
-- An atomic D1 claim serializes concurrent deliveries; a failed attempt releases its claim for retry.
+- An atomic D1 claim serializes concurrent deliveries. A failed attempt releases its claim, and a ten-second lease lets EdgeOne recover if it cancels an in-flight request before the Worker can release it.
 - A repeated EdgeOne event matching `last_event_type` returns success without a second GitHub write.
 - Check Runs use the EdgeOne deployment ID as `external_id` and persist the returned GitHub ID.
 - GitHub Deployment IDs are persisted and reused for later status updates.
@@ -58,3 +58,5 @@ GitHub installation tokens and user access tokens are request-local and are neve
 ## Current provider limitation
 
 The documented EdgeOne Makers webhook payload contains `repoBranch` but no commit SHA. A branch can advance between a push and EdgeOne's first webhook, so the resolved head can theoretically differ from the exact build commit. If EdgeOne adds a commit SHA later, it should become the authoritative value while retaining the branch-head fallback.
+
+EdgeOne Makers also currently exposes one outbound Webhook configuration for an entire account rather than one per project. Because this version issues credentials per connection, an EdgeOne account can have one active connection at a time. Supporting several projects from one EdgeOne account requires grouping connections behind a shared account-level hook and credential.

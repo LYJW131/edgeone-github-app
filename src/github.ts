@@ -87,8 +87,20 @@ export function getUser(userToken: string): Promise<GitHubUser> {
   return githubRequest<GitHubUser>("/user", userToken);
 }
 
-export function getUserInstallation(userToken: string, installationId: number): Promise<GitHubInstallation> {
-  return githubRequest<GitHubInstallation>(`/user/installations/${installationId}`, userToken);
+export async function getUserInstallation(
+  userToken: string,
+  installationId: number,
+): Promise<GitHubInstallation> {
+  for (let page = 1; page <= 10; page += 1) {
+    const result = await githubRequest<{ installations: GitHubInstallation[] }>(
+      `/user/installations?per_page=100&page=${page}`,
+      userToken,
+    );
+    const installation = result.installations.find((candidate) => candidate.id === installationId);
+    if (installation) return installation;
+    if (result.installations.length < 100) break;
+  }
+  throw new GitHubApiError("GitHub App installation is not accessible to the authenticated user", 404);
 }
 
 export async function getInstallationToken(env: Env, installationId: number): Promise<string> {
