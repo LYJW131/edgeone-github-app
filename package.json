@@ -1,0 +1,26 @@
+{
+  "name": "edgeone-github-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:local": "wrangler d1 migrations apply edgeone-github-app --local",
+    "db:remote": "wrangler d1 migrations apply edgeone-github-app --remote",
+    "deploy": "wrangler deploy",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "dev": "wrangler dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "typegen": "wrangler types --env-file .dev.vars.example --include-runtime false",
+    "typegen:check": "pnpm typegen && git diff --exit-code -- worker-configuration.d.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.21.3",
+    "@cloudflare/workers-types": "^5.20260815.1",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.123.0"
+  },
+  "packageManager": "pnpm@10.14.0"
+}
