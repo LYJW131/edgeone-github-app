@@ -17,7 +17,9 @@ import {
   getConnectionByHook,
   getDeploymentState,
   releaseDeploymentEvent,
+  updateCheckRunId,
   updateDeploymentState,
+  updateGitHubDeploymentId,
 } from "./store";
 
 const EDGEONE_EVENTS = new Set(["deployment.created", "deployment.succeeded", "deployment.failed"]);
@@ -80,8 +82,12 @@ export async function handleEdgeOneWebhook(request: Request, env: Env, hookId: s
   if (event.projectId !== connection.edgeoneProjectId) return jsonResponse({ error: "Project does not match this connection" }, 409);
   if (event.repoBranch !== connection.branch) return jsonResponse({ error: "Branch does not match this connection" }, 409);
 
-  const installationToken = await getInstallationToken(env, connection.installationId);
-  let state = await getDeploymentState(env.DB, connection.id, event.deploymentId);
+  const [installationToken, existingState] = await Promise.all([
+    getInstallationToken(env, connection.installationId),
+    getDeploymentState(env.DB, connection.id, event.deploymentId),
+  ]);
+  const stateWasCreated = !existingState;
+  let state = existingState;
   if (!state) {
     const initialSha = await resolveCommitSha(
       installationToken,
@@ -108,40 +114,40 @@ export async function handleEdgeOneWebhook(request: Request, env: Env, hookId: s
   };
 
   try {
-    if (connection.checksEnabled) {
-      if (!state.checkRunId) {
-        state.checkRunId = await findCheckRun(
-          installationToken,
-          connection.repositoryOwner,
-          connection.repositoryName,
-          state.headSha,
-          event.deploymentId,
-        );
-      }
-      state.checkRunId = await syncCheckRun(
+    const checkRun = async (): Promise<number | null> => {
+      if (!connection.checksEnabled) return state.checkRunId;
+      const existingCheckRunId = state.checkRunId ?? (stateWasCreated ? null : await findCheckRun(
+        installationToken,
+        connection.repositoryOwner,
+        connection.repositoryName,
+        state.headSha,
+        event.deploymentId,
+      ));
+      const checkRunId = await syncCheckRun(
         installationToken,
         connection.repositoryOwner,
         connection.repositoryName,
         state.headSha,
         presentation,
-        state.checkRunId,
+        existingCheckRunId,
       );
-      await updateDeploymentState(env.DB, state);
-    }
+      state.checkRunId = checkRunId;
+      await updateCheckRunId(env.DB, state.connectionId, state.edgeoneDeploymentId, checkRunId);
+      return checkRunId;
+    };
 
-    if (connection.deploymentsEnabled) {
-      if (!state.githubDeploymentId) {
-        state.githubDeploymentId = await findDeployment(
-          installationToken,
-          connection.repositoryOwner,
-          connection.repositoryName,
-          state.headSha,
-          connection.environment,
-          event.deploymentId,
-        );
-      }
-      if (!state.githubDeploymentId) {
-        state.githubDeploymentId = await createDeployment(
+    const deployment = async (): Promise<number | null> => {
+      if (!connection.deploymentsEnabled) return state.githubDeploymentId;
+      let githubDeploymentId = state.githubDeploymentId ?? (stateWasCreated ? null : await findDeployment(
+        installationToken,
+        connection.repositoryOwner,
+        connection.repositoryName,
+        state.headSha,
+        connection.environment,
+        event.deploymentId,
+      ));
+      if (!githubDeploymentId) {
+        githubDeploymentId = await createDeployment(
           installationToken,
           connection.repositoryOwner,
           connection.repositoryName,
@@ -149,18 +155,23 @@ export async function handleEdgeOneWebhook(request: Request, env: Env, hookId: s
           connection.environment,
           presentation,
         );
-        await updateDeploymentState(env.DB, state);
+        state.githubDeploymentId = githubDeploymentId;
+        await updateGitHubDeploymentId(env.DB, state.connectionId, state.edgeoneDeploymentId, githubDeploymentId);
       }
       await createDeploymentStatus(
         installationToken,
         connection.repositoryOwner,
         connection.repositoryName,
-        state.githubDeploymentId,
+        githubDeploymentId,
         connection.environment,
         presentation,
       );
-    }
+      return githubDeploymentId;
+    };
 
+    [state.checkRunId, state.githubDeploymentId] = await Promise.all([checkRun(), deployment()]);
+
+    await updateDeploymentState(env.DB, state);
     await completeDeploymentEvent(env.DB, state, event.eventType);
     return jsonResponse({ ok: true, headSha: state.headSha });
   } catch (error) {

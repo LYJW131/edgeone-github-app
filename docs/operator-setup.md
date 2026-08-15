@@ -13,7 +13,7 @@ Open **GitHub settings → Developer settings → GitHub Apps → New GitHub App
 | Callback URL | `https://YOUR_WORKER/auth/github/callback` |
 | Setup URL | `https://YOUR_WORKER/setup` |
 | Redirect on update | Enabled |
-| Request user authorization during installation | Enabled |
+| Request user authorization during installation | Disabled |
 | Webhook URL | `https://YOUR_WORKER/github/webhook` |
 | Webhook secret | A new random value |
 | Where can this GitHub App be installed? | Any account |
@@ -25,10 +25,7 @@ Repository permissions:
 - **Deployments:** Read and write
 - **Metadata:** Read-only (mandatory)
 
-Subscribe to:
-
-- **Installation**
-- **Installation repositories**
+GitHub delivers the installation lifecycle events used for cleanup automatically; they are not selectable in the GitHub App event list.
 
 Generate a private key and record the App's Client ID and Client Secret.
 
@@ -104,13 +101,15 @@ On the setup page:
 4. choose the GitHub Deployment environment name;
 5. create the connection.
 
-The Worker displays a unique webhook URL and bearer token once. In EdgeOne Makers, add that URL as the deployment webhook and configure:
+The Worker displays a unique webhook URL and secret token once. In **Makers → Settings → Webhooks**, select the project, enable the three deployment events, paste the URL into **Endpoint**, and paste the raw token into **Secret token**. EdgeOne sends it as:
 
 ```text
 Authorization: Bearer THE_GENERATED_TOKEN
 ```
 
 Subscribe to `deployment.created`, `deployment.succeeded`, and `deployment.failed`. EdgeOne retries non-2xx responses, so do not rotate or delete the connection while a deployment is being delivered.
+
+EdgeOne currently exposes one outbound Webhook configuration for the whole Makers account. This version therefore supports one active connection per EdgeOne account; creating another connection requires replacing the account-level endpoint and token.
 
 ## 6. Rotation and removal
 

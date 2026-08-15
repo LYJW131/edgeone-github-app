@@ -226,7 +226,7 @@ export async function createSetupConnection(request: Request, env: Env): Promise
   const webhookUrl = `${canonicalBaseUrl(env)}/edgeone/${hookId}`;
   return htmlResponse(page("Connection created", `
 <h2>Connection created</h2><p>Copy these values now. The bearer token is not stored and cannot be shown again.</p>
-<div class="card"><label>Webhook URL</label><div class="token">${escapeHtml(webhookUrl)}</div><label>Authorization header</label><div class="token">Bearer ${escapeHtml(rawBearerToken)}</div></div>
+<div class="card"><label>Webhook URL</label><div class="token">${escapeHtml(webhookUrl)}</div><label>Secret token</label><div class="token">${escapeHtml(rawBearerToken)}</div></div>
 <p>Configure EdgeOne events <code>deployment.created</code>, <code>deployment.succeeded</code>, and <code>deployment.failed</code>.</p><p><a class="button" href="/setup">Return to setup</a></p>`));
 }
 
