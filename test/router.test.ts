@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index";
 
 describe("router", () => {
+  it("redirects the root page to setup", async () => {
+    const response = await worker.fetch(new Request("https://example.com/"), {} as Env);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/setup");
+  });
+
   it("serves health without accessing tenant state", async () => {
     const response = await worker.fetch(new Request("https://example.com/health"), {} as Env);
     expect(response.status).toBe(200);

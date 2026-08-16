@@ -21,11 +21,6 @@ export interface GitHubRepository {
   default_branch: string;
 }
 
-interface GitHubCheckRun {
-  id: number;
-  external_id: string | null;
-}
-
 interface GitHubDeployment {
   id: number;
   payload: Record<string, unknown> | string | null;
@@ -150,72 +145,35 @@ export interface DeploymentPresentation {
   projectName: string;
 }
 
-function checkPayload(headSha: string, event: DeploymentPresentation): Record<string, unknown> {
-  const base = {
-    name: "EdgeOne Makers",
-    head_sha: headSha,
-    details_url: event.detailsUrl,
-    external_id: event.deploymentId,
-  };
-  if (event.eventType === "deployment.created") {
-    return {
-      ...base,
-      status: "in_progress",
-      output: { title: "EdgeOne deployment started", summary: `${event.projectName} is building on EdgeOne Makers.` },
-    };
-  }
-  const succeeded = event.eventType === "deployment.succeeded";
-  return {
-    ...base,
-    status: "completed",
-    conclusion: succeeded ? "success" : "failure",
-    output: {
-      title: succeeded ? "EdgeOne deployment completed" : "EdgeOne deployment failed",
-      summary: succeeded
-        ? `${event.projectName} deployed successfully on EdgeOne Makers.`
-        : `${event.projectName} failed to deploy on EdgeOne Makers.`,
-    },
-  };
-}
-
-export async function findCheckRun(
-  token: string,
-  owner: string,
-  repository: string,
-  headSha: string,
-  deploymentId: string,
-): Promise<number | null> {
-  const result = await githubRequest<{ check_runs: GitHubCheckRun[] }>(
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${headSha}/check-runs?check_name=${encodeURIComponent("EdgeOne Makers")}&filter=all&per_page=100`,
-    token,
-  );
-  return result.check_runs.find((run) => run.external_id === deploymentId)?.id ?? null;
-}
-
-export async function syncCheckRun(
+export async function createCommitStatus(
   token: string,
   owner: string,
   repository: string,
   headSha: string,
   event: DeploymentPresentation,
-  existingId: number | null,
-): Promise<number> {
-  const payload = checkPayload(headSha, event);
-  if (existingId) {
-    const { head_sha: _headSha, ...updatePayload } = payload;
-    const updated = await githubRequest<GitHubCheckRun>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/check-runs/${existingId}`,
-      token,
-      { method: "PATCH", body: JSON.stringify(updatePayload) },
-    );
-    return updated.id;
-  }
-  const created = await githubRequest<GitHubCheckRun>(
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/check-runs`,
+): Promise<void> {
+  const state = event.eventType === "deployment.created"
+    ? "pending"
+    : event.eventType === "deployment.succeeded"
+      ? "success"
+      : "failure";
+  await githubRequest(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/statuses/${headSha}`,
     token,
-    { method: "POST", body: JSON.stringify(payload) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        state,
+        target_url: event.detailsUrl,
+        description: state === "success"
+          ? "EdgeOne deployment completed"
+          : state === "failure"
+            ? "EdgeOne deployment failed"
+            : "EdgeOne deployment started",
+        context: "EdgeOne Makers",
+      }),
+    },
   );
-  return created.id;
 }
 
 function payloadMatchesDeployment(payload: GitHubDeployment["payload"], edgeoneDeploymentId: string): boolean {

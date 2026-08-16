@@ -32,6 +32,19 @@ describe("EdgeOne payload parsing", () => {
 });
 
 describe("setup input parsing", () => {
+  it("renders separate copy buttons for the webhook URL and secret", () => {
+    const content = setup.connectionCreatedContent(
+      "https://example.com/edgeone/hook-id",
+      "secret-token",
+      "script-nonce",
+    );
+    expect(content).toContain('data-copy-target="webhookUrl"');
+    expect(content).toContain('data-copy-target="secretToken"');
+    expect(content).toContain('value="https://example.com/edgeone/hook-id"');
+    expect(content).toContain('value="secret-token"');
+    expect(content).toContain('<script nonce="script-nonce">');
+  });
+
   it("accepts only positive safe installation IDs", () => {
     expect(setup.parseInstallationId("123")).toBe(123);
     expect(setup.parseInstallationId("0")).toBeNull();

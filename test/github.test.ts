@@ -1,46 +1,50 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getUserInstallation, GitHubApiError, syncCheckRun } from "../src/github";
+import { createCommitStatus, getUserInstallation, GitHubApiError } from "../src/github";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("GitHub Check Run requests", () => {
-  it("does not send immutable head_sha when updating a Check Run", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 99, external_id: "edgeone-1" }), {
+describe("GitHub commit status requests", () => {
+  it("links a pending status directly to the EdgeOne deployment", async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response("{}", {
       headers: { "Content-Type": "application/json" },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await syncCheckRun("token", "owner", "repository", "abc123", {
-      eventType: "deployment.succeeded",
+    await createCommitStatus("token", "owner", "repository", "abc123", {
+      eventType: "deployment.created",
       deploymentId: "edgeone-1",
       detailsUrl: "https://example.com/deployment",
       projectName: "Example",
-    }, 99);
+    });
 
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(init.method).toBe("PATCH");
-    expect(body).not.toHaveProperty("head_sha");
-    expect(body).toMatchObject({ status: "completed", conclusion: "success" });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    expect(url).toBe("https://api.github.com/repos/owner/repository/statuses/abc123");
+    expect(init?.method).toBe("POST");
+    expect(body).toMatchObject({
+      state: "pending",
+      target_url: "https://example.com/deployment",
+      context: "EdgeOne Makers",
+    });
   });
 
-  it("includes head_sha when creating a Check Run", async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: 100, external_id: "edgeone-2" }), {
+  it("maps successful deployments to a successful status", async () => {
+    const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response("{}", {
       headers: { "Content-Type": "application/json" },
     }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await syncCheckRun("token", "owner", "repository", "def456", {
-      eventType: "deployment.created",
+    await createCommitStatus("token", "owner", "repository", "def456", {
+      eventType: "deployment.succeeded",
       deploymentId: "edgeone-2",
       detailsUrl: "https://example.com/deployment",
       projectName: "Example",
-    }, null);
+    });
 
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).toMatchObject({ head_sha: "def456", status: "in_progress" });
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ state: "success" });
   });
 });
 

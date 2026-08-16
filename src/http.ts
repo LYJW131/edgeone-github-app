@@ -54,12 +54,13 @@ export function makeCookie(name: string, value: string, maxAge: number, secure: 
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secureAttribute}`;
 }
 
-export function htmlResponse(body: string, status = 200): Response {
+export function htmlResponse(body: string, status = 200, scriptNonce?: string): Response {
+  const scriptPolicy = scriptNonce ? `; script-src 'nonce-${scriptNonce}'` : "";
   return new Response(body, {
     status,
     headers: {
       "Cache-Control": "no-store",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'${scriptPolicy}`,
       "Content-Type": "text/html; charset=utf-8",
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",

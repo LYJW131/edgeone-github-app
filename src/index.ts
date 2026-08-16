@@ -1,7 +1,7 @@
 import { handleEdgeOneWebhook } from "./edgeone";
 import { GitHubApiError } from "./github";
 import { handleGitHubWebhook } from "./github-webhook";
-import { htmlResponse, jsonResponse, RequestTooLargeError } from "./http";
+import { jsonResponse, redirect, RequestTooLargeError } from "./http";
 import {
   createSetupConnection,
   deleteSetupConnection,
@@ -17,7 +17,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     return jsonResponse({ ok: true, service: "edgeone-github-app" });
   }
   if (request.method === "GET" && url.pathname === "/") {
-    return htmlResponse(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>EdgeOne GitHub App</title></head><body><main><h1>EdgeOne GitHub App</h1><p>Publish Tencent EdgeOne Makers deployments as GitHub Checks and Deployments.</p><p><a href="/setup">Install or configure the App</a></p></main></body></html>`);
+    return redirect("/setup");
   }
   if (request.method === "GET" && url.pathname === "/setup") return showSetup(request, env);
   if (request.method === "GET" && url.pathname === "/auth/github/start") {

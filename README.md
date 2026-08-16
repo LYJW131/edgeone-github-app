@@ -42,7 +42,7 @@ On the setup page, fill in:
 | EdgeOne project ID | The exact `makers-...` project ID from Tencent Cloud |
 | Deployment branch | The branch EdgeOne builds, usually `main` |
 | GitHub environment | Replace the prefilled `Production` with `EdgeOne Production` |
-| Create GitHub Check Runs | Keep enabled to show `EdgeOne Makers` on commits |
+| Create GitHub commit status | Keep enabled to show `EdgeOne Makers` on commits with a direct EdgeOne details link |
 | Create GitHub Deployments | Keep enabled to populate the repository Deployments page |
 
 Use a separate environment name such as `EdgeOne Production` instead of `Production` when Vercel or another provider also reports to GitHub. GitHub groups deployments by the exact environment string; using `Production` for both providers mixes them together.
@@ -73,7 +73,7 @@ EdgeOne sends the token as an HTTP bearer credential. Do not add `Bearer`, quote
 
 Trigger a deployment for the configured branch in EdgeOne. A working connection produces:
 
-- an **EdgeOne Makers** check on the commit, initially in progress and then successful or failed;
+- an **EdgeOne Makers** status on the commit, initially pending and then successful or failed;
 - a GitHub Deployment under **Repository → Deployments → EdgeOne Production**;
 - a **Details** link back to the matching deployment in the Tencent Cloud console.
 
@@ -93,7 +93,7 @@ EdgeOne currently provides one outbound Webhook configuration for the whole Page
 
 ## What the service does
 
-- shows `EdgeOne Makers` as a check on the commit EdgeOne is building;
+- shows `EdgeOne Makers` as a commit status whose **Details** link opens the matching EdgeOne deployment;
 - creates and updates a GitHub Deployment for the configured environment;
 - verifies that setup was started by a GitHub user who can access the installation;
 - gives every repository/project connection its own unguessable webhook URL and bearer token;
@@ -107,7 +107,7 @@ EdgeOne's webhook currently identifies a branch but does not include a commit SH
 ```text
 EdgeOne project ── bearer-auth webhook ──▶ Cloudflare Worker
                                                │
-                                               ├── GitHub Check Run
+                                               ├── GitHub commit status
                                                ├── GitHub Deployment + status
                                                └── D1 tenant/deployment state
 

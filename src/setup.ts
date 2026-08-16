@@ -47,7 +47,7 @@ function page(title: string, content: string): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title><style>
-:root{color-scheme:light dark;font-family:ui-sans-serif,system-ui,sans-serif}body{max-width:960px;margin:0 auto;padding:48px 20px;line-height:1.5}a{color:#1473e6}header{margin-bottom:36px}.muted{opacity:.72}.card{border:1px solid #8885;border-radius:14px;padding:20px;margin:16px 0}label{display:block;font-weight:650;margin:14px 0 5px}input,select,button{box-sizing:border-box;font:inherit;padding:10px 12px;border:1px solid #8888;border-radius:8px;background:transparent}input,select{width:100%}button,.button{display:inline-block;background:#238636;color:white;border:0;padding:10px 15px;border-radius:8px;text-decoration:none;cursor:pointer}.danger{background:#cf222e}.row{display:flex;gap:12px;align-items:center}.row input{width:auto}.token{font-family:ui-monospace,monospace;overflow-wrap:anywhere;padding:12px;background:#8882;border-radius:8px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #8884}code{overflow-wrap:anywhere}</style></head>
+:root{color-scheme:light dark;font-family:ui-sans-serif,system-ui,sans-serif}body{max-width:960px;margin:0 auto;padding:48px 20px;line-height:1.5}a{color:#1473e6}header{margin-bottom:36px}.muted{opacity:.72}.card{border:1px solid #8885;border-radius:14px;padding:20px;margin:16px 0}label{display:block;font-weight:650;margin:14px 0 5px}input,select,button{box-sizing:border-box;font:inherit;padding:10px 12px;border:1px solid #8888;border-radius:8px;background:transparent}input,select{width:100%}button,.button{display:inline-block;background:#238636;color:white;border:0;padding:10px 15px;border-radius:8px;text-decoration:none;cursor:pointer}.danger{background:#cf222e}.row{display:flex;gap:12px;align-items:center}.row input{width:auto}.copy-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}.copy-row input{font-family:ui-monospace,monospace;background:#8882}.copy-button{min-width:82px}.copy-button[data-copied="true"]{background:#1a7f37}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;border-bottom:1px solid #8884}code{overflow-wrap:anywhere}@media(max-width:640px){.copy-row{grid-template-columns:1fr}.copy-button{width:100%}}</style></head>
 <body><header><h1>EdgeOne GitHub App</h1><p class="muted">Tencent EdgeOne Makers deployment status for GitHub.</p></header>${content}</body></html>`;
 }
 
@@ -152,7 +152,7 @@ export async function showSetup(request: Request, env: Env): Promise<Response> {
 <label for="edgeoneProjectId">EdgeOne project ID</label><input id="edgeoneProjectId" name="edgeoneProjectId" required maxlength="200" placeholder="makers-vd4b9ycpaa0n">
 <label for="branch">Deployment branch</label><input id="branch" name="branch" required maxlength="255" value="main">
 <label for="environment">GitHub environment</label><input id="environment" name="environment" required maxlength="100" value="Production">
-<label class="row"><input type="checkbox" name="checksEnabled" checked> Create GitHub Check Runs</label>
+<label class="row"><input type="checkbox" name="checksEnabled" checked> Create GitHub commit status</label>
 <label class="row"><input type="checkbox" name="deploymentsEnabled" checked> Create GitHub Deployments</label>
 <p><button type="submit">Create connection</button></p></form>`));
 }
@@ -168,6 +168,14 @@ async function parseForm(request: Request): Promise<URLSearchParams> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.startsWith("application/x-www-form-urlencoded")) throw new Error("Unsupported form content type");
   return new URLSearchParams(await readBodyText(request, 32 * 1024));
+}
+
+function connectionCreatedContent(webhookUrl: string, rawBearerToken: string, scriptNonce: string): string {
+  return `
+<h2>Connection created</h2><p>Copy these values now. The bearer token is not stored and cannot be shown again.</p>
+<div class="card"><label for="webhookUrl">Webhook URL</label><div class="copy-row"><input id="webhookUrl" readonly value="${escapeHtml(webhookUrl)}"><button class="copy-button" type="button" data-copy-target="webhookUrl">Copy</button></div><label for="secretToken">Secret token</label><div class="copy-row"><input id="secretToken" readonly value="${escapeHtml(rawBearerToken)}"><button class="copy-button" type="button" data-copy-target="secretToken">Copy</button></div></div>
+<p>Configure EdgeOne events <code>deployment.created</code>, <code>deployment.succeeded</code>, and <code>deployment.failed</code>.</p><p><a class="button" href="/setup">Return to setup</a></p>
+<script nonce="${scriptNonce}">document.querySelectorAll("[data-copy-target]").forEach((button)=>{button.addEventListener("click",async()=>{const input=document.getElementById(button.dataset.copyTarget);if(!(input instanceof HTMLInputElement))return;let copied=false;try{await navigator.clipboard.writeText(input.value);copied=true}catch{input.select();copied=document.execCommand("copy")}if(copied){button.textContent="Copied";button.dataset.copied="true";window.setTimeout(()=>{button.textContent="Copy";delete button.dataset.copied},1600)}})})</script>`;
 }
 
 export async function createSetupConnection(request: Request, env: Env): Promise<Response> {
@@ -224,10 +232,12 @@ export async function createSetupConnection(request: Request, env: Env): Promise
   }
 
   const webhookUrl = `${canonicalBaseUrl(env)}/edgeone/${hookId}`;
-  return htmlResponse(page("Connection created", `
-<h2>Connection created</h2><p>Copy these values now. The bearer token is not stored and cannot be shown again.</p>
-<div class="card"><label>Webhook URL</label><div class="token">${escapeHtml(webhookUrl)}</div><label>Secret token</label><div class="token">${escapeHtml(rawBearerToken)}</div></div>
-<p>Configure EdgeOne events <code>deployment.created</code>, <code>deployment.succeeded</code>, and <code>deployment.failed</code>.</p><p><a class="button" href="/setup">Return to setup</a></p>`));
+  const scriptNonce = randomToken(18);
+  return htmlResponse(
+    page("Connection created", connectionCreatedContent(webhookUrl, rawBearerToken, scriptNonce)),
+    200,
+    scriptNonce,
+  );
 }
 
 export async function deleteSetupConnection(request: Request, env: Env): Promise<Response> {
@@ -244,4 +254,4 @@ export async function deleteSetupConnection(request: Request, env: Env): Promise
   return redirect(`${canonicalBaseUrl(env)}/setup`);
 }
 
-export const testables = { parseInstallationId, validText };
+export const testables = { connectionCreatedContent, parseInstallationId, validText };

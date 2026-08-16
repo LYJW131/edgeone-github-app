@@ -28,7 +28,7 @@ Installation access is never inferred from an `installation_id` query parameter.
 1. EdgeOne sends a deployment webhook to `/edgeone/:hookId` with `Authorization: Bearer ...`.
 2. The Worker performs bounded parsing, hashes the token, and compares it in constant time.
 3. It checks the configured project and branch, then resolves the branch head on the first event.
-4. It creates or updates a GitHub Check Run and a GitHub Deployment status.
+4. It publishes a GitHub commit status with a direct EdgeOne details link and creates or updates a GitHub Deployment status.
 5. D1 records the chosen SHA and remote object IDs. Repeated delivery of the same event is idempotent.
 
 ### GitHub App webhook
@@ -52,7 +52,7 @@ GitHub installation tokens and user access tokens are request-local and are neve
 - The D1 primary key `(connection_id, edgeone_deployment_id)` stabilizes the commit SHA across retries.
 - An atomic D1 claim serializes concurrent deliveries. A failed attempt releases its claim, and a ten-second lease lets EdgeOne recover if it cancels an in-flight request before the Worker can release it.
 - A repeated EdgeOne event matching `last_event_type` returns success without a second GitHub write.
-- Check Runs use the EdgeOne deployment ID as `external_id` and persist the returned GitHub ID.
+- Commit statuses use the stable `EdgeOne Makers` context; GitHub displays the latest state for the commit and sends its **Details** link directly to EdgeOne.
 - GitHub Deployment IDs are persisted and reused for later status updates.
 
 ## Current provider limitation

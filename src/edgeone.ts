@@ -1,12 +1,11 @@
 import { constantTimeEqual, sha256Hex } from "./crypto";
 import {
+  createCommitStatus,
   createDeployment,
   createDeploymentStatus,
-  findCheckRun,
   findDeployment,
   getInstallationToken,
   resolveCommitSha,
-  syncCheckRun,
   type DeploymentPresentation,
 } from "./github";
 import { jsonResponse, readBodyText } from "./http";
@@ -17,7 +16,6 @@ import {
   getConnectionByHook,
   getDeploymentState,
   releaseDeploymentEvent,
-  updateCheckRunId,
   updateDeploymentState,
   updateGitHubDeploymentId,
 } from "./store";
@@ -114,26 +112,15 @@ export async function handleEdgeOneWebhook(request: Request, env: Env, hookId: s
   };
 
   try {
-    const checkRun = async (): Promise<number | null> => {
-      if (!connection.checksEnabled) return state.checkRunId;
-      const existingCheckRunId = state.checkRunId ?? (stateWasCreated ? null : await findCheckRun(
-        installationToken,
-        connection.repositoryOwner,
-        connection.repositoryName,
-        state.headSha,
-        event.deploymentId,
-      ));
-      const checkRunId = await syncCheckRun(
+    const commitStatus = async (): Promise<void> => {
+      if (!connection.checksEnabled) return;
+      await createCommitStatus(
         installationToken,
         connection.repositoryOwner,
         connection.repositoryName,
         state.headSha,
         presentation,
-        existingCheckRunId,
       );
-      state.checkRunId = checkRunId;
-      await updateCheckRunId(env.DB, state.connectionId, state.edgeoneDeploymentId, checkRunId);
-      return checkRunId;
     };
 
     const deployment = async (): Promise<number | null> => {
@@ -169,7 +156,8 @@ export async function handleEdgeOneWebhook(request: Request, env: Env, hookId: s
       return githubDeploymentId;
     };
 
-    [state.checkRunId, state.githubDeploymentId] = await Promise.all([checkRun(), deployment()]);
+    const [, githubDeploymentId] = await Promise.all([commitStatus(), deployment()]);
+    state.githubDeploymentId = githubDeploymentId;
 
     await updateDeploymentState(env.DB, state);
     await completeDeploymentEvent(env.DB, state, event.eventType);

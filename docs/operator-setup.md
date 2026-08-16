@@ -20,7 +20,7 @@ Open **GitHub settings → Developer settings → GitHub Apps → New GitHub App
 
 Repository permissions:
 
-- **Checks:** Read and write
+- **Commit statuses:** Read and write
 - **Contents:** Read-only
 - **Deployments:** Read and write
 - **Metadata:** Read-only (mandatory)
@@ -101,7 +101,7 @@ On the setup page:
 4. choose the GitHub Deployment environment name;
 5. create the connection.
 
-The Worker displays a unique webhook URL and secret token once. In **Makers → Settings → Webhooks**, select the project, enable the three deployment events, paste the URL into **Endpoint**, and paste the raw token into **Secret token**. EdgeOne sends it as:
+The Worker displays a unique webhook URL and secret token once, with a copy button beside each value. In **Makers → Settings → Webhooks**, select the project, enable the three deployment events, paste the URL into **Endpoint**, and paste the raw token into **Secret token**. EdgeOne sends it as:
 
 ```text
 Authorization: Bearer THE_GENERATED_TOKEN
