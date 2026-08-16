@@ -80,15 +80,56 @@ export async function verifyState<T>(state: string, secret: string): Promise<T |
   }
 }
 
+function derLength(length: number): Uint8Array {
+  if (length < 0x80) return Uint8Array.of(length);
+  const bytes: number[] = [];
+  for (let remaining = length; remaining > 0; remaining >>>= 8) bytes.unshift(remaining & 0xff);
+  return Uint8Array.of(0x80 | bytes.length, ...bytes);
+}
+
+function derValue(tag: number, value: Uint8Array): Uint8Array {
+  const length = derLength(value.byteLength);
+  const encoded = new Uint8Array(1 + length.byteLength + value.byteLength);
+  encoded[0] = tag;
+  encoded.set(length, 1);
+  encoded.set(value, 1 + length.byteLength);
+  return encoded;
+}
+
+function concatBytes(...values: Uint8Array[]): Uint8Array {
+  const combined = new Uint8Array(values.reduce((length, value) => length + value.byteLength, 0));
+  let offset = 0;
+  for (const value of values) {
+    combined.set(value, offset);
+    offset += value.byteLength;
+  }
+  return combined;
+}
+
+function pkcs1ToPkcs8(pkcs1: Uint8Array): Uint8Array {
+  const rsaEncryptionAlgorithm = Uint8Array.of(
+    0x30, 0x0d,
+    0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
+    0x05, 0x00,
+  );
+  return derValue(0x30, concatBytes(
+    Uint8Array.of(0x02, 0x01, 0x00),
+    rsaEncryptionAlgorithm,
+    derValue(0x04, pkcs1),
+  ));
+}
+
 function pemToDer(pem: string): ArrayBuffer {
-  const normalized = pem.replaceAll("\\n", "\n");
-  const body = normalized
-    .replace("-----BEGIN PRIVATE KEY-----", "")
-    .replace("-----END PRIVATE KEY-----", "")
-    .replaceAll(/\s/gu, "");
-  const decoded = base64ToBytes(body);
-  const buffer = new ArrayBuffer(decoded.byteLength);
-  new Uint8Array(buffer).set(decoded);
+  const normalized = pem.replaceAll("\\r", "\r").replaceAll("\\n", "\n").trim();
+  const pkcs8Match = normalized.match(/-----BEGIN PRIVATE KEY-----([\s\S]+?)-----END PRIVATE KEY-----/u);
+  const pkcs1Match = normalized.match(/-----BEGIN RSA PRIVATE KEY-----([\s\S]+?)-----END RSA PRIVATE KEY-----/u);
+  const match = pkcs8Match ?? pkcs1Match;
+  if (!match) throw new Error("GitHub App private key must be a PKCS#8 or PKCS#1 PEM");
+
+  const decoded = base64ToBytes(match[1].replaceAll(/\s/gu, ""));
+  const der = pkcs1Match ? pkcs1ToPkcs8(decoded) : decoded;
+  const buffer = new ArrayBuffer(der.byteLength);
+  new Uint8Array(buffer).set(der);
   return buffer;
 }
 
@@ -107,3 +148,5 @@ export async function createGitHubAppJwt(clientId: string, privateKey: string): 
   const signature = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, encoder.encode(unsigned));
   return `${unsigned}.${base64UrlEncode(new Uint8Array(signature))}`;
 }
+
+export const testables = { derLength, pemToDer };
