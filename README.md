@@ -1,142 +1,147 @@
+<div align="right"><strong>中文</strong> · <a href="README.en.md">English</a></div>
+
 # EdgeOne Deploy Checker
 
-Report Tencent Cloud EdgeOne Pages/Makers deployments back to GitHub as commit checks and GitHub Deployments. Repository code, CI workflows, and EdgeOne build commands do not need to change.
+把腾讯云 EdgeOne Pages / 边缘函数 Pages（Makers）的部署状态同步到 GitHub。每次 EdgeOne 构建时，它会在对应提交上显示 \`EdgeOne Makers\` 状态，并在仓库的 Deployments 页面创建独立的部署记录；无需修改站点代码、构建命令或 GitHub Actions。
 
-## Use the hosted version
+## 直接使用托管版
 
-The hosted service runs at [eo-deploy-checker.lyjw.dev](https://eo-deploy-checker.lyjw.dev) and uses the public GitHub App [EdgeOne Deploy Checker](https://github.com/apps/edgeone-deploy-checker). It can be installed on personal accounts and organizations; the App only receives access to the repositories selected during installation.
+- 托管服务：[eo-deploy-checker.lyjw.dev](https://eo-deploy-checker.lyjw.dev)
+- GitHub App：[EdgeOne Deploy Checker](https://github.com/apps/edgeone-deploy-checker)
 
-### Before you start
+它支持个人账号和组织。安装时选择哪些仓库，App 就只能访问哪些仓库。
 
-You need:
+### 使用前准备
 
-- a GitHub repository that is already connected to an EdgeOne Pages/Makers project;
-- permission to install a GitHub App on that repository;
-- permission to edit **EdgeOne Pages/Makers → Settings → Webhooks** in the Tencent Cloud console;
-- the EdgeOne project ID, such as `makers-vd4b9ycpaa0n`.
+你需要：
 
-The project ID is the `makers-...` value in an EdgeOne project URL:
+- 一个已经连接到 EdgeOne Pages / Makers 项目的 GitHub 仓库；
+- 在该仓库或组织中安装 GitHub App 的权限；
+- 修改腾讯云 **EdgeOne Pages / Makers → 设置 → Webhook** 的权限；
+- EdgeOne 项目 ID，例如 \`makers-vd4b9ycpaa0n\`。
 
-```text
+项目 ID 是腾讯云项目地址中以 \`makers-\` 开头的这一段：
+
+\`\`\`text
 https://console.cloud.tencent.com/edgeone/makers/project/makers-vd4b9ycpaa0n/...
-                                                        └──── project ID ────┘
-```
+                                                        └──── 项目 ID ────┘
+\`\`\`
 
-### 1. Install the GitHub App
+### 第一步：安装 GitHub App
 
-Open the [hosted setup page](https://eo-deploy-checker.lyjw.dev/setup) and select **Install on GitHub**, or open the [GitHub installation page](https://github.com/apps/edgeone-deploy-checker/installations/new) directly.
+打开[托管设置页](https://eo-deploy-checker.lyjw.dev/setup)，点击 **Install on GitHub**；也可以直接打开 [GitHub App 安装页](https://github.com/apps/edgeone-deploy-checker/installations/new)。
 
-1. Choose the GitHub account or organization that owns the repository.
-2. Prefer **Only select repositories**, then select each repository that EdgeOne may report deployments to.
-3. Finish the installation and authorize the setup page when GitHub asks.
+1. 选择 GitHub 仓库所属的个人账号或组织。
+2. 建议选择 **Only select repositories**，再勾选需要接收 EdgeOne 部署状态的仓库。
+3. 完成安装，并按 GitHub 提示授权设置页。
 
-GitHub redirects back to the hosted setup page. If authorization expires or is interrupted, return to [the setup page](https://eo-deploy-checker.lyjw.dev/setup) and restart the flow.
+安装完成后，GitHub 会跳回设置页。如果授权过期或中途退出，重新打开[设置页](https://eo-deploy-checker.lyjw.dev/setup)即可。
 
-### 2. Create a connection
+### 第二步：创建连接
 
-On the setup page, fill in:
+在设置页填写：
 
-| Field | What to enter |
+| 字段 | 填写内容 |
 | --- | --- |
-| Repository | The repository deployed by the EdgeOne project |
-| EdgeOne project ID | The exact `makers-...` project ID from Tencent Cloud |
-| Deployment branch | The branch EdgeOne builds, usually `main` |
-| GitHub environment | Replace the prefilled `Production` with `EdgeOne Production` |
-| Create GitHub commit status | Keep enabled to show `EdgeOne Makers` on commits with a direct EdgeOne details link |
-| Create GitHub Deployments | Keep enabled to populate the repository Deployments page |
+| Repository | EdgeOne 项目所部署的 GitHub 仓库 |
+| EdgeOne project ID | 腾讯云中的完整 \`makers-...\` 项目 ID |
+| Deployment branch | EdgeOne 构建的分支，通常是 \`main\` |
+| GitHub environment | 建议填写 \`EdgeOne Production\` |
+| Create GitHub commit status | 建议开启；在提交上显示 \`EdgeOne Makers\`，Details 直达腾讯云部署页 |
+| Create GitHub Deployments | 建议开启；在 GitHub Deployments 页面记录部署 |
 
-Use a separate environment name such as `EdgeOne Production` instead of `Production` when Vercel or another provider also reports to GitHub. GitHub groups deployments by the exact environment string; using `Production` for both providers mixes them together.
+如果 Vercel 或其他平台也会向 GitHub 上报部署，请不要沿用默认的 \`Production\`，而应使用 \`EdgeOne Production\`。GitHub 会按环境名称归类，同名会把不同平台的部署混在一起。
 
-Select **Create connection**. The next page displays two values:
+点击 **Create connection** 后，页面只会显示一次：
 
-- a unique **Webhook URL**;
-- a unique **Secret token**.
+- 专属的 **Webhook URL**；
+- 专属的 **Secret token**。
 
-Copy both immediately. The raw token is shown only once and is not stored by the service.
+分别点击旁边的 **Copy** 按钮保存。服务只存储令牌摘要，无法再次显示原始令牌。
 
-### 3. Configure the EdgeOne webhook
+### 第三步：配置 EdgeOne Webhook
 
-In the Tencent Cloud console, open **EdgeOne Pages/Makers → Settings → Webhooks** and configure the outbound webhook:
+进入腾讯云 **EdgeOne Pages / Makers → 设置 → Webhook**：
 
-1. Set the scope to the relevant project and select the same EdgeOne project used above.
-2. Paste the generated **Webhook URL** into **Endpoint**.
-3. Paste the generated **Secret token** into **Secret token**.
-4. Enable all three deployment events:
-   - `deployment.created`
-   - `deployment.succeeded`
-   - `deployment.failed`
-5. Save the webhook.
+1. 选择对应的 EdgeOne 项目。
+2. 把设置页生成的 **Webhook URL** 粘贴到 **Endpoint**。
+3. 把 **Secret token** 原样粘贴到腾讯云的同名字段。
+4. 开启以下三个事件：
+   - \`deployment.created\`
+   - \`deployment.succeeded\`
+   - \`deployment.failed\`
+5. 保存。
 
-EdgeOne sends the token as an HTTP bearer credential. Do not add `Bearer`, quotes, or other text around the value in the Tencent Cloud field.
+EdgeOne 会自动把令牌作为 HTTP Bearer 凭据发送。腾讯云字段里只填令牌本身，不要手动添加 \`Bearer\`、引号或其他字符。
 
-### 4. Verify the integration
+### 第四步：验证
 
-Trigger a deployment for the configured branch in EdgeOne. A working connection produces:
+在 EdgeOne 上触发一次目标分支的部署。连接正常时，你会看到：
 
-- an **EdgeOne Makers** status on the commit, initially pending and then successful or failed;
-- a GitHub Deployment under **Repository → Deployments → EdgeOne Production**;
-- a **Details** link back to the matching deployment in the Tencent Cloud console.
+- 对应 GitHub 提交出现 **EdgeOne Makers** 状态，并从等待变为成功或失败；
+- 点击该状态的 **Details**，直接打开对应的腾讯云 EdgeOne 部署页；
+- GitHub 仓库的 **Deployments → EdgeOne Production** 中出现部署记录。
 
-No GitHub Actions workflow or repository-specific integration code is required.
+整个过程不需要增加 GitHub Actions，也不需要针对 EdgeOne 修改站点代码。
 
-### Manage or remove a connection
+## 管理或删除连接
 
-Return to [the hosted setup page](https://eo-deploy-checker.lyjw.dev/setup) to view or delete connections available to the current installation.
+回到[托管设置页](https://eo-deploy-checker.lyjw.dev/setup)，可以查看和删除当前 GitHub App 安装下的连接。
 
-- To rotate a connection token, delete and recreate the connection, then immediately replace the URL and token in Tencent Cloud.
-- To add or remove repositories, open the GitHub App installation settings for the account.
-- Uninstalling the GitHub App removes the installation's tenant configuration from the hosted service.
+- 如需轮换令牌：删除并重新创建连接，然后立刻更新腾讯云中的 URL 和令牌。
+- 如需增删仓库：进入该账号的 GitHub App 安装设置。
+- 卸载 GitHub App 后，服务会删除该安装对应的租户配置。
 
-## Current limitation
+## 当前限制
 
-EdgeOne currently provides one outbound Webhook configuration for the whole Pages/Makers account. Therefore, one Tencent Cloud account can have only one active connection with this version at a time. Creating another connection for the same EdgeOne account replaces the account-level webhook destination. Different Tencent Cloud accounts remain isolated and can use the hosted service independently.
+EdgeOne 目前按整个 Pages / Makers 账号提供一份出站 Webhook 配置，而不是每个项目各一份。因此，这一版本在同一个腾讯云账号内同时只能配置一个有效连接；为另一个项目创建连接时，需要替换账号级 Webhook 的目标地址和令牌。不同腾讯云账号之间不受影响。
 
-## What the service does
+EdgeOne Webhook 当前只提供分支名，不提供提交 SHA。收到首次事件时，服务会通过 GitHub 查询该分支的最新提交；同一部署的后续事件会一直使用已记录的 SHA。
 
-- shows `EdgeOne Makers` as a commit status whose **Details** link opens the matching EdgeOne deployment;
-- creates and updates a GitHub Deployment for the configured environment;
-- verifies that setup was started by a GitHub user who can access the installation;
-- gives every repository/project connection its own unguessable webhook URL and bearer token;
-- verifies GitHub App webhooks and removes tenant data when the App is uninstalled;
-- keeps tenant configuration and deployment state in Cloudflare D1.
+## 工作原理
 
-EdgeOne's webhook currently identifies a branch but does not include a commit SHA. The first event therefore resolves the configured branch head through GitHub; later events keep using that recorded SHA.
+\`\`\`text
+EdgeOne 项目 ── Bearer 鉴权 Webhook ──▶ Cloudflare Worker
+                                                │
+                                                ├── GitHub Commit Status
+                                                ├── GitHub Deployment + Status
+                                                └── D1 租户与部署状态
 
-## Architecture
+GitHub App 安装 ── 用户 OAuth 校验 ─────▶ 设置页面
+GitHub App 事件 ── HMAC 鉴权 Webhook ───▶ 安装卸载与仓库移除清理
+\`\`\`
 
-```text
-EdgeOne project ── bearer-auth webhook ──▶ Cloudflare Worker
-                                               │
-                                               ├── GitHub commit status
-                                               ├── GitHub Deployment + status
-                                               └── D1 tenant/deployment state
+服务会：
 
-GitHub App setup ── user OAuth verification ──▶ setup UI
-GitHub App events ── HMAC-auth webhook ────────▶ installation cleanup
-```
+- 以 \`EdgeOne Makers\` Commit Status 展示构建状态，并让 **Details** 直达对应 EdgeOne 部署；
+- 为指定环境创建、更新 GitHub Deployment；
+- 验证设置操作确实来自有权访问该 GitHub App 安装的用户；
+- 为每个仓库 / 项目连接生成独立、不可猜测的 Webhook URL 和 256 位 Bearer 令牌；
+- 校验 GitHub App Webhook 签名，并在 App 卸载或仓库移除时清理租户数据；
+- 使用 Cloudflare D1 保存多租户配置和部署状态。
 
-## Self-hosting and development
+## 自托管与开发
 
-- [Architecture and security model](docs/architecture.md)
-- [Create your own GitHub App and deploy the Worker](docs/operator-setup.md)
+- [架构与安全模型](docs/architecture.md) · [English](docs/architecture.en.md)
+- [创建自己的 GitHub App 并部署 Worker](docs/operator-setup.md) · [English](docs/operator-setup.en.md)
 
-For local development:
+本地开发：
 
-```bash
+\`\`\`bash
 cp .dev.vars.example .dev.vars
 pnpm install
 pnpm db:local
 pnpm dev
-```
+\`\`\`
 
-Run the validation suite with:
+运行完整校验：
 
-```bash
+\`\`\`bash
 pnpm test
 pnpm typecheck
 pnpm deploy:dry
-```
+\`\`\`
 
-## License
+## 许可证
 
 [MIT](LICENSE)

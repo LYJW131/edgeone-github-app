@@ -1,123 +1,199 @@
-# Operator setup
+<div align="right"><strong>中文</strong> · <a href="operator-setup.en.md">English</a></div>
 
-This guide creates a new public GitHub App and deploys its backend to Cloudflare Workers. Use a staging App first; changing an existing private App to public is not supported by GitHub.
+# 自托管部署指南
 
-## 1. Create a GitHub App
+这篇文档介绍如何创建一个公开 GitHub App，并把后端部署到自己的 Cloudflare Workers 账号。建议先用测试 App 验证完整流程；GitHub 不支持把已有的私有 App 直接改成公开 App。
 
-Open **GitHub settings → Developer settings → GitHub Apps → New GitHub App** and configure:
+## 一、创建 GitHub App
 
-| Setting | Value |
+进入 **GitHub Settings → Developer settings → GitHub Apps → New GitHub App**，填写：
+
+| GitHub 设置 | 填写内容 |
 | --- | --- |
-| GitHub App name | A globally unique public name |
-| Homepage URL | Your project or documentation URL |
-| Callback URL | `https://YOUR_WORKER/auth/github/callback` |
-| Setup URL | `https://YOUR_WORKER/setup` |
-| Redirect on update | Enabled |
-| Request user authorization during installation | Disabled |
-| Webhook URL | `https://YOUR_WORKER/github/webhook` |
-| Webhook secret | A new random value |
+| GitHub App name | 一个全局唯一的公开名称 |
+| Homepage URL | 项目主页或文档地址 |
+| Callback URL | \`https://你的域名/auth/github/callback\` |
+| Setup URL | \`https://你的域名/setup\` |
+| Redirect on update | 开启 |
+| Request user authorization during installation | 关闭 |
+| Webhook URL | \`https://你的域名/github/webhook\` |
+| Webhook secret | 一枚新生成的随机密钥 |
 | Where can this GitHub App be installed? | Any account |
 
-Repository permissions:
+配置 Repository permissions：
 
-- **Commit statuses:** Read and write
-- **Contents:** Read-only
-- **Deployments:** Read and write
-- **Metadata:** Read-only (mandatory)
+- **Commit statuses：Read and write**
+- **Contents：Read-only**
+- **Deployments：Read and write**
+- **Metadata：Read-only**（GitHub 强制要求）
 
-GitHub delivers the installation lifecycle events used for cleanup automatically; they are not selectable in the GitHub App event list.
+安装、卸载和安装仓库变更等生命周期事件由 GitHub 自动发送，不需要在事件列表里额外勾选。
 
-Generate a private key and record the App's Client ID and Client Secret.
+创建 App 后：
 
-GitHub downloads an RSA key in PKCS#1 form. The Worker Web Crypto API imports PKCS#8, so convert it locally:
+1. 记录 **Client ID**；
+2. 生成并记录 **Client Secret**；
+3. 生成一枚 **Private key**。
 
-```bash
-openssl pkcs8 -topk8 -nocrypt -in downloaded-key.pem -out github-app-pkcs8.pem
-```
+GitHub 下载的 RSA 私钥通常是 PKCS#1 格式，而 Worker Web Crypto 使用 PKCS#8。请在本机转换：
 
-Never commit either private-key file.
+\`\`\`bash
+openssl pkcs8 -topk8 -nocrypt \
+  -in downloaded-key.pem \
+  -out github-app-pkcs8.pem
+\`\`\`
 
-## 2. Create Cloudflare resources
+不要把任何一份私钥提交进 Git。
 
-Install dependencies and authenticate Wrangler:
+## 二、创建 Cloudflare 资源
 
-```bash
+安装依赖并登录 Wrangler：
+
+\`\`\`bash
 pnpm install
 pnpm wrangler login
-```
+\`\`\`
 
-Create D1 and ask Wrangler to update the existing `DB` binding:
+创建 D1 数据库，并让 Wrangler 更新现有的 \`DB\` binding：
 
-```bash
+\`\`\`bash
 pnpm wrangler d1 create edgeone-github-app --binding DB --update-config
-```
+\`\`\`
 
-Confirm that Wrangler added a `database_id` to the existing D1 entry in `wrangler.jsonc`. If your Wrangler version does not update it, copy the returned ID manually. Set `PUBLIC_BASE_URL` and `GITHUB_APP_SLUG` to the deployed values, then apply the migration:
+确认 \`wrangler.jsonc\` 中现有的 D1 配置已经出现 \`database_id\`。如果当前 Wrangler 没有自动写入，就把命令返回的数据库 ID 手动填入。
 
-```bash
+然后修改 \`wrangler.jsonc\`：
+
+- \`PUBLIC_BASE_URL\`：Worker 的公开 HTTPS 根地址，不带末尾斜杠；
+- \`GITHUB_APP_SLUG\`：GitHub App 地址中的 slug。
+
+例如 GitHub App 地址是：
+
+\`\`\`text
+https://github.com/apps/edgeone-deploy-checker
+\`\`\`
+
+那么 slug 就是：
+
+\`\`\`text
+edgeone-deploy-checker
+\`\`\`
+
+应用远端数据库迁移：
+
+\`\`\`bash
 pnpm db:remote
-```
+\`\`\`
 
-## 3. Store secrets
+## 三、写入 Worker Secrets
 
-Generate the state-signing secret and the GitHub webhook secret with a cryptographically secure generator, for example:
+使用密码学安全的随机生成器分别生成 OAuth state 密钥和 GitHub Webhook 密钥，例如：
 
-```bash
+\`\`\`bash
 openssl rand -base64 32
-```
+\`\`\`
 
-Store each value interactively:
+逐项写入 Cloudflare：
 
-```bash
+\`\`\`bash
 pnpm wrangler secret put GITHUB_CLIENT_ID
 pnpm wrangler secret put GITHUB_CLIENT_SECRET
 pnpm wrangler secret put GITHUB_APP_PRIVATE_KEY
 pnpm wrangler secret put GITHUB_WEBHOOK_SECRET
 pnpm wrangler secret put OAUTH_STATE_SECRET
-```
+\`\`\`
 
-For `GITHUB_APP_PRIVATE_KEY`, paste the entire PKCS#8 PEM including its header and footer.
+\`GITHUB_APP_PRIVATE_KEY\` 必须粘贴完整的 PKCS#8 PEM，包括：
 
-## 4. Validate and deploy
+\`\`\`text
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+\`\`\`
 
-```bash
+其中 \`GITHUB_WEBHOOK_SECRET\` 必须与 GitHub App 设置页的 **Webhook secret** 完全一致。
+
+## 四、校验并部署
+
+\`\`\`bash
 pnpm test
 pnpm typecheck
 pnpm deploy:dry
 pnpm deploy
-```
+\`\`\`
 
-If you use a custom domain, add it in Cloudflare, update `PUBLIC_BASE_URL`, redeploy, and ensure the GitHub App Callback, Setup, and Webhook URLs use the same canonical origin.
+如需使用自定义域名：
 
-Check `https://YOUR_WORKER/health`, then install the GitHub App on a test repository. GitHub should redirect to the setup page.
+1. 在 Cloudflare 为 Worker 添加域名；
+2. 把 \`PUBLIC_BASE_URL\` 改成该域名；
+3. 重新部署；
+4. 确认 GitHub App 的 Callback URL、Setup URL 和 Webhook URL 全部使用同一个正式域名。
 
-## 5. Connect an EdgeOne project
+部署后访问：
 
-On the setup page:
+\`\`\`text
+https://你的域名/health
+\`\`\`
 
-1. choose a repository;
-2. enter the exact EdgeOne project ID;
-3. enter the branch EdgeOne deploys;
-4. choose the GitHub Deployment environment name;
-5. create the connection.
+正常响应应为：
 
-The Worker displays a unique webhook URL and secret token once, with a copy button beside each value. In **Makers → Settings → Webhooks**, select the project, enable the three deployment events, paste the URL into **Endpoint**, and paste the raw token into **Secret token**. EdgeOne sends it as:
+\`\`\`json
+{"ok":true,"service":"edgeone-github-app"}
+\`\`\`
 
-```text
-Authorization: Bearer THE_GENERATED_TOKEN
-```
+再把 GitHub App 安装到一个测试仓库。安装完成后，GitHub 应跳转到 Worker 的设置页。
 
-Subscribe to `deployment.created`, `deployment.succeeded`, and `deployment.failed`. EdgeOne retries non-2xx responses, so do not rotate or delete the connection while a deployment is being delivered.
+## 五、连接 EdgeOne 项目
 
-EdgeOne currently exposes one outbound Webhook configuration for the whole Makers account. This version therefore supports one active connection per EdgeOne account; creating another connection requires replacing the account-level endpoint and token.
+在设置页：
 
-## 6. Rotation and removal
+1. 选择 GitHub 仓库；
+2. 输入完整的 EdgeOne 项目 ID；
+3. 输入 EdgeOne 实际部署的分支；
+4. 设置 GitHub Deployment 环境名称，建议使用 \`EdgeOne Production\`；
+5. 保持 Commit Status 与 GitHub Deployments 开启；
+6. 创建连接。
 
-Delete and recreate a connection to rotate its bearer token. Update EdgeOne immediately after rotation. Uninstalling the GitHub App or removing a repository from the installation triggers cleanup through the signed GitHub webhook.
+创建成功后，页面会为 Webhook URL 和 Secret token 分别提供复制按钮。原始令牌只显示一次。
 
-## References
+进入腾讯云 **Makers → 设置 → Webhook**：
 
-- [GitHub: About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)
-- [GitHub: Using webhooks with a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/using-webhooks-with-github-apps)
-- [Cloudflare: Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
-- [Tencent Cloud: EdgeOne Pages Webhook](https://cloud.tencent.com/document/product/1552/127680)
+1. 选择对应项目；
+2. 把 URL 粘贴到 **Endpoint**；
+3. 把原始令牌粘贴到 **Secret token**；
+4. 订阅 \`deployment.created\`、\`deployment.succeeded\` 和 \`deployment.failed\`；
+5. 保存。
+
+EdgeOne 实际发送的认证头为：
+
+\`\`\`text
+Authorization: Bearer 生成的令牌
+\`\`\`
+
+腾讯云的 Secret token 字段只填令牌本身，不需要手动添加 \`Bearer\`。
+
+EdgeOne 会重试非 2xx 响应，因此在部署事件仍在投递时，不要删除连接或轮换令牌。
+
+## 六、端到端验证
+
+在 EdgeOne 手动触发目标分支的一次部署，然后检查：
+
+- GitHub 提交出现 \`EdgeOne Makers\`，状态从 pending 变成 success 或 failure；
+- 该状态的 **Details** 直接打开本次 EdgeOne 部署；
+- GitHub 仓库的 Deployments 页面出现指定环境；
+- Worker 日志中没有 GitHub API 或鉴权错误。
+
+## 七、轮换与删除
+
+- 轮换 Bearer 令牌：删除并重新创建连接，随后立刻更新 EdgeOne Webhook。
+- 移除单个仓库：在 GitHub App 安装设置中取消该仓库权限，服务会通过签名 Webhook 清理连接。
+- 删除整个租户：卸载 GitHub App，服务会删除该安装及其关联状态。
+
+EdgeOne 当前只为整个 Makers 账号提供一份出站 Webhook 配置。因此，本版本在同一 EdgeOne 账号内只支持一个有效连接；改接其他项目时，需要替换账号级 Endpoint 和令牌。
+
+## 参考资料
+
+- [GitHub：About the setup URL](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)
+- [GitHub：Using webhooks with a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/using-webhooks-with-github-apps)
+- [Cloudflare：Wrangler configuration](https://developers.cloudflare.com/workers/wrangler/configuration/)
+- [腾讯云：EdgeOne Pages Webhook](https://cloud.tencent.com/document/product/1552/127680)
